@@ -254,6 +254,3 @@ class Bitstamp
   end
 
 end
-
-btc = Bitstamp.new 924522, '8yBDgkKoKPpqUJKgzS101zW1fR5hjgJ1', 'EeMOqa5PQNPt92gcOughk4A3ujMXkncv'
-p btc

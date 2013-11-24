@@ -39,16 +39,25 @@ class Bitstamp
   end
 
   #send public request to the server
-  def public_request method, params = {}
-    params = URI.escape(params.collect{ |k,v| "#{k}=#{v}"}.join('&'))
-    url = @api_url + method + '?' + params
-    uri = URI.parse(url)
-    http = Net::HTTP.new(uri.host, uri.port)
+  def public_request method, params = nil
+    if params.nil?
+      params = ''
+    else
+      params = URI.escape(params.collect{ |k,v| "#{k}=#{v}"}.join('&'))
+    end
+    url = @api_url + method + '/?' + params
+    raise ArgumentError if not url.is_a? String
+    uri = URI.parse url
+    http = Net::HTTP.new uri.host, uri.port
     http.use_ssl = true
-    req = Net::HTTP::Get.new(uri.path)
-    res = http.request(req)
+    http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+    req = Net::HTTP::Get.new uri.path
+    res = http.request req
     data = res.body
-    result = JSON.parse(data)
+    if not data.is_a? String or not data.is_json?
+      raise RuntimeError, "Server returned invalid data."
+    end
+    result = JSON.parse data
   end
 
   #send private request to the server
@@ -57,17 +66,23 @@ class Bitstamp
     message = nonce + @client_id.to_s + @api_key
     sha256 = OpenSSL::Digest::SHA256.new
     hash = OpenSSL::HMAC.digest(sha256, @secret, message)
-    signature = Base64.encode64(hash).chomp.gsub(/\n/,'')
+    signature = Base64.encode64(hash).chomp.gsub("\n",'')
     required = { 'key' => @api_key, 'nonce' => nonce, 'signature' => signature }
     params = required.merge(params)
-    uri = URI.parse(@api_url + method)
-    http = Net::HTTP.new(uri.host, uri.port)
+    url = @api_url + method
+    raise ArgumentError if not url.is_a? String
+    uri = URI.parse url
+    http = Net::HTTP.new uri.host, uri.port
     http.use_ssl = true
-    req = Net::HTTP::Post.new(uri.path, initheader = {'Content-Type' =>'application/json'})
-    req.body = params.to_json
-    res = http.request(req)
+    http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+    req = Net::HTTP::Post.new(uri.path)
+    req.set_form_data params
+    res = http.request req
     data = res.body
-    result = JSON.parse(data)
+    if not data.is_a? String or not data.is_json?
+      raise RuntimeError, "Server returned invalid data."
+    end
+    result = JSON.parse data
   end
 
   #################################### PUBLIC ###################################
@@ -201,7 +216,7 @@ class Bitstamp
     private_request 'redeem_code', params
   end
 
-  ############ widthdrawal requests #############
+  ############ withdrawal requests #############
   #Returns JSON list of withdrawal requests. Each request is represented as dictionary:
     #id - order id
     #datetime - date and time
@@ -253,4 +268,14 @@ class Bitstamp
     private_request 'ripple_withdrawal'
   end
 
+end
+
+class String
+  def is_json?
+    begin
+      !!JSON.parse(self)
+    rescue
+      false
+    end
+  end
 end
